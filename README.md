@@ -1,5 +1,5 @@
-# FDMAR 
+# Quad-Net 
 
-Code for "Fourier Dual-domain Network for CT Metal Artifact Reduction" will be avaliable later
+Code for "Quad-domain Network for CT Metal Artifact Reduction" will be avaliable later
 
 
