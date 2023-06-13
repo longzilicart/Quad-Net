@@ -4,10 +4,10 @@ import sys
 
 import RIL.recon as RIL
 from utils.ct_tools import *
-# 2023新添加测试
 from Model.QuadNetbase import *
 from Model.QuadNet import *
 from Model.Basic_FFC import *
+from MAR_trainer import *
 # from .MAR_trainer import *
 import tensorboard
 import wandb
@@ -56,34 +56,34 @@ def get_parser():
                         help='drop_last of the dataloader')
     #optimizer
     parser.add_argument('--lr', default=0.001, type=float,
-                        help='学习率')    
+                        help='learning rate')    
     parser.add_argument('--beta1', default=0.5, type=float,
-                        help='Adam的beta1参数')    
+                        help='Adam的beta1 parameter')    
     parser.add_argument('--beta2', default=0.999, type=float,
-                        help='Adam的beta2参数')    
+                        help='Adam的beta2 parameter')    
     parser.add_argument('--epochs', default=200, type=int,
-                        help='训练轮数')    
+                        help='training epochs')    
     #step_optimizer
     parser.add_argument('--step_size', default=30, type=int,
-                        help='Adam的beta2参数')    
+                        help='parameter for stepLR')    
     parser.add_argument('--step_gamma', default=0.5, type=float,
-                        help='训练轮数')    
+                        help='learning rate half')    
 
     #args for resume training
     parser.add_argument('--resume', default=False, type=bool,
-                        help = '是否使用之前的checkpoint')
+                        help = 'model checkpoint')
     parser.add_argument('--resume_opt', default=False, type=bool,
-                        help = '是否使用之前的checkpoint')
+                        help = 'optimizer checkpoint')
     parser.add_argument('--net_check_path', default='', type=str,
-                        help='net_checkpoint的具体路径')
+                        help='path of the network checkpoint')
     parser.add_argument('--opt_check_path', default='', type=str,
-                        help='optimizer_checkpoint的具体路径')
+                        help='path of the optimizer checkpoint')
     parser.add_argument('--sino_check_path', default='', type=str,
-                        help='sino_check_path的具体路径,split_refine')
+                        help='sino_check_path, split_refine')
     parser.add_argument('--image_check_path', default='', type=str,
-                        help='image_check_path的具体路径,split_refine')   
+                        help='image_check_path, split_refine')   
     parser.add_argument('--refine_check_path', default='', type=str,
-                        help='refine_check_path的具体路径,split_refine')
+                        help='refine_check_path, split_refine')
 
     # network args
     parser.add_argument('--mode', default='sino', type=str,
@@ -114,14 +114,14 @@ def get_parser():
     parser.add_argument('--tester_save_path',default='', type=str,
                         help='tester_save path' )
     parser.add_argument('--ablation',default='MAR', type=str,
-                        help='具体用什么ablation设置。MAR正常MAR,MARres,MARli只替换trace部分,MARim:只有图片')
+                        help='for ablation study')
     return parser
 
 
 
 
 def main(opt):
-    '''选择网络,调用trainer训练'''
+    '''select network and training mode'''
     sino_net = None
     image_net = None
     refine_net = None
@@ -131,14 +131,13 @@ def main(opt):
     if opt.mode in ['sino', 'refine', 'split_refine']:
         if opt.sino_net == 'mask_Fourier': # FDMAR sino
             sino_net = Mask_Fourier_sino(FFCResNetGenerator, n_downsampling = 2, resnet_conv_ginout=opt.sino_ginout, n_blocks = 6, add_out_act = False)
-        # [最新测试]
         elif 'AE' in opt.sino_net:
             init_down_ginout = 0 
             lama_ginout = opt.sino_ginout
             init_conv_kwargs = {'ratio_gin':init_down_ginout,'ratio_gout':init_down_ginout,'enable_lfu':False}
             downsample_conv_kwargs = {'ratio_gin':init_down_ginout,'ratio_gout':init_down_ginout,'enable_lfu':False}
             resnet_conv_kwargs = {'ratio_gin':lama_ginout,'ratio_gout':lama_ginout,'enable_lfu':False}
-            if opt.sino_net == "Fourier_AENet_mp": # with metal projection
+            if opt.sino_net == "Fourier_AENet_mp": # with metal mask projection
                 sino_net = Fourier_Sino_AENet(2, 1, n_downsampling=2, e_blocks=5, d_blocks=1, init_conv_kwargs=init_conv_kwargs, downsample_conv_kwargs=downsample_conv_kwargs, resnet_conv_kwargs=resnet_conv_kwargs, global_skip = False)
             else: 
                 raise NotImplementedError('FAEnet select error')
@@ -157,30 +156,27 @@ def main(opt):
     # refine net
     if opt.mode == 'refine' or opt.mode == 'split_refine':
         if opt.refine_net == 'Image_Fourier_Refine':
-            # 其中F_block_select需要调整
             refine_net = Image_Fourier_Refine(2, 1, f_block = opt.refine_f_block, c_block = opt.refine_c_block)
         else:
             raise NotImplementedError('refine image domain not implemented')
     
-    if opt.dataset_name == 'size512': # 【TODO 没提供选项】
+    if opt.dataset_name == 'size512':
         radon = RIL.radon
         image_radon = RIL.image_radon
 
-    elif opt.ablation == 'MARres':
-        MAR_net = MAR_net_residual(sino_net,image_net,refine_net,radon)
-    elif opt.ablation == 'MARres_maskimageu_mp':
-        MAR_net = MAR_net_residual_mp(sino_net,image_net,refine_net,radon) 
+    # elif opt.ablation == 'MARres':
+    #     MAR_net = MAR_net_residual(sino_net,image_net,refine_net,radon)
+    # elif opt.ablation == 'MARres_maskimageu_mp':
+    #     MAR_net = MAR_net_residual_mp(sino_net,image_net,refine_net,radon) 
+# if __name__ == "__main__":
+#     pass
 
-if __name__ == "__main__":
+    trainer = MAR_Trainer(opt.mode, sino_net, image_net, refine_net, radon, image_radon, opt)
+    print('start training MAR model')
+    trainer.fit()
+    print('finish training MAR model')
 
-    pass
-
-
-# currently busy, will update later ...
-# trainer = MAR_Trainer(opt.mode, sino_net, image_net, refine_net, radon, image_radon, opt)
-# print('finish training')
-# if __name__ == "__main__":    
-#     # os.environ["WANDB_MODE"] = "offline"
-#     parser = get_parser()
-#     opt = parser.parse_args()
-#     main(opt)
+    if __name__ == "__main__":    
+        parser = get_parser()
+        opt = parser.parse_args()
+        main(opt)
