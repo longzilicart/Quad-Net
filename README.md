@@ -5,9 +5,8 @@ Code for "Quad-domain Network for CT Metal Artifact Reduction" will be avaliable
 
 
 
-- [ ] initial commit 
-- [ ] refine the code 
-- [ ] update markdown
+- [X] Demo  
+- [ ] update README
 - [ ] more analysis
 
 
